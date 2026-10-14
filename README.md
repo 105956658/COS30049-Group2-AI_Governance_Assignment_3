@@ -65,3 +65,47 @@ Used for feature engineering
 2. https://arxiv.org/abs/2303.03697
 3. https://www.researchgate.net/publication/398588043_Feature-Based_Detection_of_AI-Generated_Text_An_Analysis_of_Stylometric_and_Perplexity_Markers_in_Contemporary_Large_Language_Models
 
+# Front End (React)
+The web interface is in the frontend folder. It is built with React 19 and Vite, and talks to the FastAPI back end through the /api path. More detail (folder structure, API contract, error format) is in frontend/README.md.
+
+1. Install Node.js 20.19 or newer, then check the version (tested on Node 24.21.0)
+
+>> node -v
+
+2. Install the front-end packages (exact versions from package-lock.json; first time only)
+
+>> cd frontend
+
+>> npm ci
+
+3. Start the development server, then open http://localhost:3000 in a browser
+
+>> npm run dev
+
+Press Ctrl + C in the terminal to stop it. The server must run on port 3000; if that port is already in use, it stops with an error instead of switching ports.
+
+### Connecting to the back end
+In development, every request to /api is forwarded to the FastAPI server at http://127.0.0.1:8000, so start the back end first. The header shows "Model online" when the back end is reachable and "Service offline" when it is not.
+
+### Demo mode (front end only, no back end)
+To work on the interface without the back end, create a file named .env.local inside the frontend folder containing:
+
+>> VITE_USE_MOCK=true
+
+Then restart npm run dev. A "Demo data" badge appears in the header, and results come from a simple word-pattern heuristic in src/api/mock.js, not the trained model. Delete .env.local (or set the value to false) and restart to use the real model.
+
+### Pinned front-end versions
+| Package | Version |
+| --- | --- |
+| react / react-dom | 19.3.0 |
+| react-router-dom | 7.18.4 |
+| d3 | 7.9.0 |
+| lucide-react | 1.48.0 |
+| vite | 8.3.1 |
+| @vitejs/plugin-react | 6.1.1 |
+
+### Production build
+>> npm run build      # -> frontend/dist
+
+>> npm run preview    # serves the build at http://localhost:4173
+
