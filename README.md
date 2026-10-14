@@ -104,8 +104,3 @@ Then restart npm run dev. A "Demo data" badge appears in the header, and results
 | vite | 8.3.1 |
 | @vitejs/plugin-react | 6.1.1 |
 
-### Production build
->> npm run build      # -> frontend/dist
-
->> npm run preview    # serves the build at http://localhost:4173
-
