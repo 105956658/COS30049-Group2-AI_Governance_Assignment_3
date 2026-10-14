@@ -104,3 +104,23 @@ Then restart npm run dev. A "Demo data" badge appears in the header, and results
 | vite | 8.3.1 |
 | @vitejs/plugin-react | 6.1.1 |
 
+# Threat Model
+
+1. Who would want to attack your application?
+
+- Students
+
+2. What are they trying to achieve?
+
+- Students trying to pass AI-generated work and claim it as their own
+
+3. What can they actually do to it?
+
+- Students sometimes overlook that they include sensitive information (names, contacts, etc.)
+
+# Innovation Security Defenses
+
+
+
+# Advanced Security
+
