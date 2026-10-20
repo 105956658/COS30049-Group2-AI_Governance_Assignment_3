@@ -120,7 +120,11 @@ Then restart npm run dev. A "Demo data" badge appears in the header, and results
 
 # Innovation Security Defenses
 
+- Unsafe File Upload
+
+
+- Denial of Service
 
 
 # Advanced Security
-
+- Detection Evasion
