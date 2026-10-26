@@ -1,0 +1,18 @@
+{
+    "sourceFile": "backend/schemas.py",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1792998513346,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1792998513346,
+            "name": "Commit-0",
+            "content": "\"\"\"\r\nschemas.py - Pydantic request/response models. These match the contract the front end\r\nuses (frontend/src/api/detector.js and mock.js), so the UI works unchanged.\r\n\"\"\"\r\nfrom typing import Literal, Optional\r\n\r\nfrom pydantic import BaseModel, ConfigDict, Field\r\n\r\n\r\n# --- Requests ------------------------------------------------------------------\r\nclass PredictRequest(BaseModel):\r\n    model_config = ConfigDict(extra=\"forbid\")   # unknown fields are rejected, not ignored\r\n\r\n    text: str = Field(..., description=\"The text to check (20 words to 10,000 characters).\")\r\n\r\n\r\n# --- Responses -----------------------------------------------------------------\r\nclass HealthResponse(BaseModel):\r\n    status: Literal[\"ok\"]\r\n    model_loaded: bool\r\n    model_version: str\r\n\r\n\r\nclass ScoreRange(BaseModel):\r\n    low: float = Field(..., ge=0, le=1)\r\n    high: float = Field(..., ge=0, le=1)\r\n\r\n\r\nclass SentenceScore(BaseModel):\r\n    text: str\r\n    p_ai: Optional[float] = Field(None, ge=0, le=1, description=\"null when the sentence is too short to score\")\r\n\r\n\r\nclass PredictResponse(BaseModel):\r\n    label: Literal[\"ai\", \"human\"]\r\n    confidence: float = Field(..., ge=0, le=1, description=\"Probability of the predicted label\")\r\n    ai_score: float = Field(..., ge=0, le=1, description=\"Document-level P(AI) from the regressor\")\r\n    score_range: ScoreRange = Field(..., description=\"5th-95th percentile of the random forest's trees\")\r\n    sentences: list[SentenceScore]\r\n    word_count: int\r\n    model_version: str\r\n\r\n\r\n# --- Errors (for the /docs page) ------------------------------------------------\r\nclass ErrorDetail(BaseModel):\r\n    field: Optional[str] = None\r\n    message: str\r\n\r\n\r\nclass ErrorBody(BaseModel):\r\n    code: str\r\n    message: str\r\n    details: list[ErrorDetail] = []\r\n\r\n\r\nclass ErrorResponse(BaseModel):\r\n    error: ErrorBody\r\n\r\n\r\nERROR_RESPONSES = {\r\n    413: {\"model\": ErrorResponse, \"description\": \"Text or request body too large\"},\r\n    422: {\"model\": ErrorResponse, \"description\": \"Invalid input (too short, wrong fields, nothing scorable)\"},\r\n    429: {\"model\": ErrorResponse, \"description\": \"Rate limit exceeded\"},\r\n    500: {\"model\": ErrorResponse, \"description\": \"Unexpected server error\"},\r\n    503: {\"model\": ErrorResponse, \"description\": \"Server busy or prediction timed out\"},\r\n}"
+        }
+    ]
+}

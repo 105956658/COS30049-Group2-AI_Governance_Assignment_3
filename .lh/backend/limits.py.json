@@ -1,0 +1,18 @@
+{
+    "sourceFile": "backend/limits.py",
+    "activeCommit": 0,
+    "commits": [
+        {
+            "activePatchIndex": 0,
+            "patches": [
+                {
+                    "date": 1792998594443,
+                    "content": "Index: \n===================================================================\n--- \n+++ \n"
+                }
+            ],
+            "date": 1792998594443,
+            "name": "Commit-0",
+            "content": "\"\"\"\r\nlimits.py - request size limit and per-IP rate limit.\r\n\"\"\"\r\nimport time\r\nfrom collections import defaultdict, deque\r\n\r\nfrom fastapi import Request\r\n\r\nfrom errors import ApiError, error_response\r\n\r\n\r\nclass BodySizeLimitMiddleware:\r\n    \"\"\"Rejects oversized request bodies with 413 BEFORE they are parsed.\r\n\r\n    Checks Content-Length up front, and also counts bytes as they arrive, so a client\r\n    that leaves out Content-Length (chunked upload) can't get round the limit.\"\"\"\r\n\r\n    def __init__(self, app, max_bytes: int):\r\n        self.app = app\r\n        self.max_bytes = max_bytes\r\n\r\n    async def __call__(self, scope, receive, send):\r\n        if scope[\"type\"] != \"http\":\r\n            return await self.app(scope, receive, send)\r\n\r\n        headers = dict(scope.get(\"headers\") or [])\r\n        length = headers.get(b\"content-length\")\r\n        if length is not None:\r\n            try:\r\n                declared = int(length)\r\n            except ValueError:\r\n                return await error_response(400, \"bad_request\", \"Invalid Content-Length header.\")(scope, receive, send)\r\n            if declared > self.max_bytes:\r\n                return await self._too_large()(scope, receive, send)\r\n\r\n        received = 0\r\n        max_bytes = self.max_bytes\r\n\r\n        async def limited_receive():\r\n            nonlocal received\r\n            message = await receive()\r\n            if message[\"type\"] == \"http.request\":\r\n                received += len(message.get(\"body\", b\"\"))\r\n                if received > max_bytes:\r\n                    raise ApiError(413, \"payload_too_large\", f\"Request body exceeds {max_bytes:,} bytes.\")\r\n            return message\r\n\r\n        await self.app(scope, limited_receive, send)\r\n\r\n    def _too_large(self):\r\n        return error_response(413, \"payload_too_large\", f\"Request body exceeds {self.max_bytes:,} bytes.\")\r\n\r\n\r\nclass RateLimiter:\r\n    \"\"\"Sliding one-minute window per client IP. Use as a FastAPI dependency.\r\n    Runs on the event loop (async), so no locking is needed.\"\"\"\r\n\r\n    def __init__(self, per_minute: int):\r\n        self.per_minute = per_minute\r\n        self.hits: dict[str, deque] = defaultdict(deque)\r\n\r\n    async def __call__(self, request: Request):\r\n        if self.per_minute <= 0:\r\n            return\r\n        ip = request.client.host if request.client else \"unknown\"\r\n        now = time.monotonic()\r\n        window = self.hits[ip]\r\n        while window and now - window[0] > 60:\r\n            window.popleft()\r\n        if len(window) >= self.per_minute:\r\n            retry_after = int(60 - (now - window[0])) + 1\r\n            raise ApiError(\r\n                429, \"rate_limited\",\r\n                \"Too many checks in a short time. Please wait a moment and try again.\",\r\n                headers={\"Retry-After\": str(retry_after)},\r\n            )\r\n        window.append(now)\r\n        if len(self.hits) > 10_000:   # stop the table itself growing without bound\r\n            for key in [k for k, v in self.hits.items() if not v]:\r\n                del self.hits[key]"
+        }
+    ]
+}
