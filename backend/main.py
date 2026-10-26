@@ -11,7 +11,8 @@ Run from the backend folder:
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, File, UploadFile
+from upload_security import read_safe_text_file
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from starlette.exceptions import HTTPException as StarletteHTTPException
@@ -103,3 +104,20 @@ async def predict(req: PredictRequest) -> PredictResponse:
         word_count=word_count,
         model_version=settings.MODEL_VERSION,
     )
+
+@app.post(
+    "/api/predict-file",
+    response_model=PredictResponse,
+    responses={
+        **ERROR_RESPONSES,
+        415: {
+            "description": "Unsupported file type, encoding, or content."
+        },
+    },
+    dependencies=[Depends(rate_limit)],
+)
+async def predict_file(
+    file: UploadFile = File(...),
+) -> PredictResponse:
+    text = await read_safe_text_file(file)
+    return await predict(PredictRequest(text=text))

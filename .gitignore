@@ -11,3 +11,22 @@ venv/
 .env
 __pycache__/
 results/
+# Environment files and secrets
+.env
+.env.*
+!.env.example
+!.env.*.example
+*.pem
+*.key
+
+# Frontend
+node_modules/
+dist/
+
+# Logs and editor history
+*.log
+.lh/
+
+# Operating system files
+.DS_Store
+Thumbs.db
