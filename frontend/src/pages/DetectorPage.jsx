@@ -14,7 +14,7 @@ import SentenceHighlights from '../components/detector/SentenceHighlights.jsx';
 import HistoryTable from '../components/detector/HistoryTable.jsx';
 import SentenceChart from '../components/charts/SentenceChart.jsx';
 import HistoryChart from '../components/charts/HistoryChart.jsx';
-import { predict } from '../api/detector.js';
+import { predict, predictFile } from '../api/detector.js';
 import useSessionHistory from '../hooks/useSessionHistory.js';
 import useDocumentTitle from '../hooks/useDocumentTitle.js';
 
@@ -68,6 +68,55 @@ export default function DetectorPage() {
     }
   }
 
+  const [uploadError, setUploadError] = useState(null);
+
+async function handleFileChange(event) {
+  const file = event.target.files?.[0];
+  event.target.value = '';
+  if (!file) return;
+
+  setUploadError(null);
+
+  // These checks help the user; the backend validates again.
+  if (!file.name.toLowerCase().endsWith('.txt')) {
+    setUploadError('Please select a .txt file.');
+    return;
+  }
+
+  if (file.size > 32_000) {
+    setUploadError('File must be at most 32,000 bytes.');
+    return;
+  }
+
+  controllerRef.current?.abort();
+  const controller = new AbortController();
+  controllerRef.current = controller;
+
+  setStatus('loading');
+  setError(null);
+
+  try {
+    const result = await predictFile(file, {
+      signal: controller.signal,
+    });
+
+    const uploadedText = await file.text();
+    if (controller.signal.aborted) return;
+
+    setText(uploadedText);
+    const entry = addCheck(uploadedText, result);
+    focusResult.current = true;
+    setSelectedId(entry.id);
+    setSelectedSentence(null);
+    setStatus('success');
+  } catch (err) {
+    if (controller.signal.aborted) return;
+
+    setUploadError(err.message || 'File upload failed.');
+    setStatus(selected ? 'success' : 'idle');
+  }
+}
+
   function handleCancel() {
     controllerRef.current?.abort();
     setStatus(selected ? 'success' : 'idle');
@@ -108,14 +157,47 @@ export default function DetectorPage() {
       </section>
 
       <div className="detector-grid">
-        <TextInputForm
-          text={text}
-          onTextChange={handleTextChange}
-          onSubmit={handleSubmit}
-          onCancel={handleCancel}
-          loading={loading}
-          serverError={fieldError}
-        />
+        <div className="stack">
+          <TextInputForm
+            text={text}
+            onTextChange={handleTextChange}
+            onSubmit={handleSubmit}
+            onCancel={handleCancel}
+            loading={loading}
+            serverError={fieldError}
+          />
+
+          <div className="card stack">
+            <label className="label" htmlFor="file-upload">
+              Or upload a text file
+            </label>
+
+            <p id="file-upload-hint" className="hint">
+              UTF-8 .txt only, up to 32,000 bytes and 10,000 characters.
+              At least 20 words. Selecting a file starts analysis.
+            </p>
+
+            <input
+              id="file-upload"
+              type="file"
+              accept=".txt"
+              onChange={handleFileChange}
+              disabled={loading}
+              aria-invalid={Boolean(uploadError)}
+              aria-describedby={`file-upload-hint${uploadError ? ' file-upload-error' : ''}`}
+            />
+
+            {uploadError && (
+              <p
+                id="file-upload-error"
+                className="field-error"
+                role="alert"
+              >
+                {uploadError}
+              </p>
+            )}
+          </div>
+        </div>
 
         <div className="result-panel" aria-live="polite">
           {loading && (

@@ -40,7 +40,8 @@ const OFFLINE_MESSAGE =
 
 // Fallbacks when the server sends a status code but no usable message.
 const STATUS_MESSAGES = {
-  413: 'The text is larger than the server accepts.',
+  413: 'The text or file is larger than the server accepts.',
+  415: 'Unsupported file type or content. Upload a UTF-8 .txt file.',
   422: 'The server could not accept this input.',
   429: 'Too many checks in a short time. Please wait a moment and try again.',
   500: 'The server hit an unexpected problem. Please try again.',
@@ -71,6 +72,7 @@ function toApiError(status, body) {
  * `body` is a plain object sent as JSON. `signal` lets the caller cancel the request.
  */
 export async function apiFetch(path, { method = 'GET', body, timeout = 20000, signal } = {}) {
+  const isFormData = body instanceof FormData;
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(new DOMException('Timeout', 'TimeoutError')), timeout);
   const onAbort = () => controller.abort(signal.reason);
@@ -79,13 +81,19 @@ export async function apiFetch(path, { method = 'GET', body, timeout = 20000, si
   let response;
   try {
     response = await fetch(`${API_BASE}${path}`, {
-      method,
-      signal: controller.signal,
-      headers: {
-        Accept: 'application/json',
-        ...(body !== undefined ? { 'Content-Type': 'application/json' } : {}),
-      },
-      body: body === undefined ? undefined : JSON.stringify(body),
+    method,
+    signal: controller.signal,
+    headers: {
+      Accept: 'application/json',
+      ...(body !== undefined && !isFormData
+      ? { 'Content-Type': 'application/json' }
+      : {}),
+    },
+    body: body === undefined
+      ? undefined
+      : isFormData
+        ? body
+        : JSON.stringify(body),
     });
   } catch (error) {
     if (signal?.aborted) throw error; // cancelled by the caller, who will ignore it

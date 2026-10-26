@@ -19,3 +19,14 @@ export function predict(text, { signal } = {}) {
     ? mockPredict(text, { signal })
     : apiFetch('/api/predict', { method: 'POST', body: { text }, signal });
 }
+
+export function predictFile(file, { signal } = {}) {
+  const formData = new FormData();
+  formData.append('file', file);
+
+  return apiFetch('/api/predict-file', {
+    method: 'POST',
+    body: formData,
+    signal,
+  });
+}
