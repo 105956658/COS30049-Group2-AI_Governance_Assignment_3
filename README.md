@@ -94,6 +94,9 @@ To work on the interface without the back end, create a file named .env.local in
 
 Then restart npm run dev. A "Demo data" badge appears in the header, and results come from a simple word-pattern heuristic in src/api/mock.js, not the trained model. Delete .env.local (or set the value to false) and restart to use the real model.
 
+File uploads always use the real backend, including in demo mode.
+Start FastAPI to test file uploads.
+
 ### Pinned front-end versions
 | Package | Version |
 | --- | --- |
@@ -118,9 +121,89 @@ Then restart npm run dev. A "Demo data" badge appears in the header, and results
 
 - Students sometimes overlook that they include sensitive information (names, contacts, etc.)
 
+# Security Hygiene
+
+- **Safe text rendering:** Submitted sentences are rendered as React text
+  children rather than interpreted as HTML.
+- **Backend input limits:** Text is limited to 10,000 characters by default.
+  Uploaded files are limited to 32,000 bytes, and the total request body
+  is limited to 41,024 bytes by default. Backend checks enforce these limits
+  independently of frontend validation.
+- **Restricted CORS:** The default allowed origins are
+  http://localhost:3000 and http://127.0.0.1:3000.
+  Deployment origins can be configured using ALLOWED_ORIGINS.
+  CORS controls browser access; it is not authentication.
+- **Secret handling:** Local environment files and private-key file patterns
+  are excluded by .gitignore. VITE_* variables are public build settings
+  and must never contain secrets. Gitleaks scans of local files and Git
+  history reported no secrets detected within their scan scope.
+
+CORS preflight tests returned HTTP 200 for http://localhost:3000
+and HTTP 400 with "Disallowed CORS origin" for https://example.com.
+
+
 # Innovation Security Defenses
 
-- Unsafe File Upload
+## Unsafe File Upload 
+
+### Threat and defence
+
+An attacker can bypass browser validation and send oversized files,
+crafted filenames, or binary content disguised as plain text directly
+to POST /api/predict-file.
+
+The backend validates uploads in backend/upload_security.py before
+model inference:
+
+- Allows only filenames ending in .txt (case-insensitive).
+- Rejects filenames containing /, \, or ASCII control characters below 32.
+- Reads at most 32,001 bytes and rejects files larger than 32,000 bytes.
+- Decodes actual content as UTF-8, with optional BOM support.
+- Rejects unsupported control characters, empty files, and whitespace-only content.
+- Enforces the character limit and reuses prediction validation,
+  including the minimum word count.
+- Closes uploaded files in a finally block. Application code does not
+  save uploads to user-supplied paths or execute them. Multipart handling
+  may use temporary storage.
+
+Frontend checks provide early feedback, but the backend independently
+enforces validation. The declared MIME type is not trusted as proof
+of valid content.
+
+### Direct API test results
+
+The following tests were performed with curl.exe against our own
+application at http://127.0.0.1:8000 on 27 October 2026,
+bypassing frontend validation.
+
+| Test | Submitted input | Observed response |
+| --- | --- | --- |
+| Oversized file | 32,001 ASCII bytes in large.txt | HTTP 413: file_too_large |
+| Crafted filename | Plain text sent with filename=../test.txt | HTTP 415: unsupported_file_type |
+| Disguised binary content | Bytes 0, 1, 2, 3 in fake.txt, declared as text/plain | HTTP 415: invalid_file_content |
+
+All three tested requests were rejected by backend upload validation
+before model inference. Response screenshots were captured.
+
+### Trade-offs and limitations
+
+Only UTF-8 plain-text uploads are supported. PDF, Word documents,
+other encodings, and files above the limits must be converted or
+shortened first.
+
+Encoding and control-character validation is not an antivirus scan.
+HTML-like content that is valid plain text may be accepted, but
+submitted text is displayed through React text children rather than
+interpreted as HTML.
+
+Validation adds a bounded read and content scan before inference,
+in exchange for restricting supported file formats and sizes.
+
+### Video demonstration status
+
+The protected application has passed the three direct API tests above.
+A comparison against a local unprotected version remains to be recorded
+for the video, together with an explanation of the defence and its costs.
 
 
 - Denial of Service
