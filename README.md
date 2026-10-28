@@ -210,4 +210,41 @@ for the video, together with an explanation of the defence and its costs.
 
 
 # Advanced Security
-- Detection Evasion
+
+## Detection Evasion
+
+**Attack.** Pasting an essay in lower case with punctuation removed hides the case and punctuation cues the detector relies on. We tested this on our own detector, locally (fixed sample, seed 5; test n=10,000; threshold 0.5).
+
+**Metric.** Evasion success rate (ESR) is the share of AI essays caught before the attack that are missed after it. We report attacked FPR beside it, because a model that labels everything "AI" is not defended.
+
+| Detector | Clean: detection / FPR | Attacked: detection / FPR | ESR |
+| --- | --- | --- | --- |
+| original | 0.909 / 0.046 | 0.018 / 0.000 | **0.981** |
+| AI-only retrain | 0.910 / 0.045 | 1.000 / 1.000 | 0.000 |
+| balanced retrain | 0.909 / 0.046 | 0.934 / 0.217 | **0.040** |
+
+**Defenses.**
+- *Normalization* (lowercase, strip invisible characters; measured on
+  holdout_2026) failed, because the punctuation was already deleted.
+- *AI-only retraining* removed evasion but flagged every stripped human essay as AI.
+- *Balanced retraining* (stripped copies of both human and AI essays) cut ESR from 0.98 to 0.04 with no clean-accuracy cost on test. It is stable across 3 training seeds (ESR 0.037 to 0.045).
+
+**Still breaks it.** Stripping punctuation but keeping capitals gives ESR 0.76, so this is a partial defense. Stripped human essays are also over-flagged 22% of the time (0% originally).
+
+**Costs.** Training data grows about 45% (about 40 s per retrain). Inference latency is unchanged (about 1.3 ms/doc).
+
+**Limitations.** The detector does not generalize to holdout_2026 (clean FPR 0.95), only one attack family was tested, and with this false-positive rate it must not be used to judge real students.
+
+**Reproduce.**
+1. AI-only retrained detector — created first because the evaluation's
+three-way comparison loads it from models_adv/.
+- python evasion_retrain.py --mode ai_only
+
+2. Baseline + attack + normalization defence, one run per dataset.
+- python evasion_run.py --dataset test
+- python evasion_run.py --dataset holdout_2026
+
+3. Full evaluation. Trains the 3 balanced seeds into models_adv_balanced/seed1,2,3 automatically if they don't exist yet,
+then compares original / AI-only / balanced, runs the keep-capitals
+attack, and records timing. All tables land in results/evasion/.
+- python evasion_eval.py
