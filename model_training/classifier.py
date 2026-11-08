@@ -19,6 +19,11 @@ from sklearn.metrics import (accuracy_score, roc_auc_score, brier_score_loss,
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import StandardScaler
 from sklearn.svm import LinearSVC
+import sys as _sys
+from pathlib import Path as _Path
+# features.py, pipeline.py and the deployed models live in ../backend (shared with the API)
+BACKEND_DIR = _Path(__file__).resolve().parent.parent / "backend"
+_sys.path.insert(0, str(BACKEND_DIR))
 from features import sentence_dataset, FEATURE_NAMES
 
 # ---------------------------------------------------------------- arguments

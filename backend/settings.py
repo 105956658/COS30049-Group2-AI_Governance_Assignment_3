@@ -12,7 +12,6 @@ except ImportError:  # python-dotenv is optional; plain env vars still work
     pass
 
 BACKEND_DIR = Path(__file__).resolve().parent
-PROJECT_ROOT = BACKEND_DIR.parent   # where pipeline.py, features.py and models/ live
 
 
 def _env_int(name: str, default: int) -> int:
@@ -24,7 +23,7 @@ def _env_float(name: str, default: float) -> float:
 
 
 # --- Model -----------------------------------------------------------------
-MODEL_DIR = os.getenv("MODEL_DIR", str(PROJECT_ROOT / "models"))
+MODEL_DIR = os.getenv("MODEL_DIR", str(BACKEND_DIR / "models"))
 MODEL_VERSION = os.getenv("MODEL_VERSION", "svc-gmm-rfr-1.0")
 AI_THRESHOLD = 0.5   # same as config.js and the evaluation (acc@0.5)
 

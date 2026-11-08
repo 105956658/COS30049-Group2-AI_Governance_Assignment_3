@@ -104,7 +104,7 @@ Start FastAPI to test file uploads.
 | react-router-dom | 7.18.4 |
 | d3 | 7.9.0 |
 | lucide-react | 1.48.0 |
-| vite | 8.3.1 |
+| vite | 8.3.6 |
 | @vitejs/plugin-react | 6.1.1 |
 
 # Threat Model

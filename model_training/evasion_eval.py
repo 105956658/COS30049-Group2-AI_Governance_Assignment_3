@@ -27,7 +27,7 @@ import pandas as pd
 import evasion_lib as el
 from evasion_retrain import retrain
 
-ORIG = el.ROOT / "models"
+ORIG = el.BACKEND_DIR / "models"   # the deployed detector
 AI_ONLY = el.ROOT / "models_adv"
 SEEDS = [1, 2, 3]
 BAL = {1: el.ROOT / "models_adv_balanced" / "seed1",

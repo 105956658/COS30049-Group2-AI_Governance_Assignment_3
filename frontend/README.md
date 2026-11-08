@@ -37,7 +37,7 @@ the 500 and 503 error states. Set it back to `false` (or delete the file) for th
 | react-router-dom | 7.18.4 |
 | d3 | 7.9.0 |
 | lucide-react | 1.48.0 |
-| vite | 8.3.1 |
+| vite | 8.3.6 |
 | @vitejs/plugin-react | 6.1.1 |
 
 Versions are exact in `package.json`, and `.npmrc` sets `save-exact=true` so new installs stay pinned.

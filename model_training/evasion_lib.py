@@ -3,7 +3,7 @@ evasion_lib.py - shared helpers for the detection-evasion experiment.
 
 One place for everything the experiment scripts need: loading the detector,
 freezing a fixed sample, scoring text, metrics, the evasion-success-rate, the
-attack transforms, and the normalization defence. Local-only: it reads models/
+attack transforms, and the normalization defence. Local-only: it reads ../backend/models/
 and data/splits/ from disk and makes no network calls.
 
 The detector under test is the shipped document chain:
@@ -22,6 +22,11 @@ import pandas as pd
 from sklearn.metrics import (accuracy_score, precision_score, recall_score,
                              f1_score, roc_auc_score, confusion_matrix)
 
+import sys as _sys
+from pathlib import Path as _Path
+# features.py, pipeline.py and the deployed models live in ../backend (shared with the API)
+BACKEND_DIR = _Path(__file__).resolve().parent.parent / "backend"
+_sys.path.insert(0, str(BACKEND_DIR))
 from pipeline import load_models, build_doc_matrix
 from features import split_sentences, is_scorable
 
@@ -105,8 +110,8 @@ def evasion_success_rate(y, base_scores, attacked_scores):
 # Detector + scoring
 # --------------------------------------------------------------------------- #
 def load_detector(model_dir=None):
-    """Load a detector once (default: shipped models/). n_jobs=1 for determinism."""
-    models = load_models(str(model_dir or (ROOT / "models")))
+    """Load a detector once (default: deployed ../backend/models/). n_jobs=1 for determinism."""
+    models = load_models(str(model_dir or (BACKEND_DIR / "models")))
     models["rfr"]["model"].n_jobs = 1
     return models
 

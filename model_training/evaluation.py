@@ -46,6 +46,11 @@ from sklearn.metrics import (
     PrecisionRecallDisplay,
 )
 
+import sys as _sys
+from pathlib import Path as _Path
+# features.py, pipeline.py and the deployed models live in ../backend (shared with the API)
+BACKEND_DIR = _Path(__file__).resolve().parent.parent / "backend"
+_sys.path.insert(0, str(BACKEND_DIR))
 from pipeline import load_models, build_doc_matrix
 from features import split_sentences, is_scorable, doc_feature_names
 
@@ -585,7 +590,7 @@ def main():
     )
     parser.add_argument(
         "--model-dir",
-        default="models",
+        default=str(BACKEND_DIR / "models"),
     )
     parser.add_argument(
         "--output",

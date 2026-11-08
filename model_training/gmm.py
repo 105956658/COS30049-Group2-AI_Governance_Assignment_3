@@ -11,19 +11,24 @@ pd.set_option('display.width', 200)          # print wide tables in full
 pd.set_option('display.max_columns', 40)
 from sklearn.mixture import GaussianMixture
 from sklearn.preprocessing import StandardScaler
+import sys as _sys
+from pathlib import Path as _Path
+# features.py, pipeline.py and the deployed models live in ../backend (shared with the API)
+BACKEND_DIR = _Path(__file__).resolve().parent.parent / "backend"
+_sys.path.insert(0, str(BACKEND_DIR))
 from features import split_sentences, is_scorable, sentence_features, FEATURE_NAMES
 
 ap = argparse.ArgumentParser()
 ap.add_argument('--train', default='data/splits/train.csv')
 ap.add_argument('--val', default='data/splits/val.csv')
-ap.add_argument('--classifier', default='models/classifier.joblib')
+ap.add_argument('--classifier', default=str(BACKEND_DIR / 'models' / 'classifier.joblib'))
 ap.add_argument('--n-docs', type=int, default=20000)        # AI documents used to fit
 ap.add_argument('--n-check-docs', type=int, default=5000)   # val documents per class for checks
 ap.add_argument('--max-sent-per-doc', type=int, default=8)
 ap.add_argument('--k', type=int, default=None)
 ap.add_argument('--kmax', type=int, default=12)
 ap.add_argument('--elbow', type=float, default=0.10)        
-ap.add_argument('--out', default='models/gmm.joblib')
+ap.add_argument('--out', default=str(BACKEND_DIR / 'models' / 'gmm.joblib'))
 ap.add_argument('--results-dir', default='results')
 a = ap.parse_args()
 os.makedirs(a.results_dir, exist_ok=True)

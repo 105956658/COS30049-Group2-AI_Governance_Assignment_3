@@ -33,13 +33,18 @@ import pandas as pd
 import lightgbm as lgb
 from sklearn.ensemble import RandomForestRegressor
 
+import sys as _sys
+from pathlib import Path as _Path
+# features.py, pipeline.py and the deployed models live in ../backend (shared with the API)
+BACKEND_DIR = _Path(__file__).resolve().parent.parent / "backend"
+_sys.path.insert(0, str(BACKEND_DIR))
 from features import sentence_dataset, doc_feature_names
 from pipeline import build_doc_matrix
 from evasion_lib import strip_case_and_punct
 
 ROOT = Path(__file__).resolve().parent
 SPLITS = ROOT / "data" / "splits"
-SRC_MODELS = ROOT / "models"
+SRC_MODELS = BACKEND_DIR / "models"
 DEFAULT_DIR = {"ai_only": ROOT / "models_adv", "balanced": ROOT / "models_adv_balanced" / "seed1"}
 
 

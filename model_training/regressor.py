@@ -15,6 +15,11 @@ pd.set_option('display.width', 200)
 pd.set_option('display.max_columns', 40)
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.metrics import roc_auc_score, mean_absolute_error
+import sys as _sys
+from pathlib import Path as _Path
+# features.py, pipeline.py and the deployed models live in ../backend (shared with the API)
+BACKEND_DIR = _Path(__file__).resolve().parent.parent / "backend"
+_sys.path.insert(0, str(BACKEND_DIR))
 from features import doc_feature_names
 from pipeline import build_doc_matrix, predict_with_interval
 
@@ -25,7 +30,7 @@ ap.add_argument('--evals', nargs='+', default=['data/splits/test.csv',
 ap.add_argument('--n-fit-docs', type=int, default=20000)
 ap.add_argument('--n-eval-docs', type=int, default=10000)
 ap.add_argument('--n-errors', type=int, default=15)   # FPs and FNs saved per eval set
-ap.add_argument('--model-dir', default='models')
+ap.add_argument('--model-dir', default=str(BACKEND_DIR / 'models'))
 ap.add_argument('--results-dir', default='results')
 a = ap.parse_args()
 os.makedirs(a.results_dir, exist_ok=True)

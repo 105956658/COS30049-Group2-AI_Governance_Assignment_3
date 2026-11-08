@@ -17,7 +17,6 @@ DOS_PROTECTION=off switches to the naive version (model called directly inside t
 async endpoint) - used only for the "before" measurement.
 """
 import asyncio
-import sys
 from concurrent.futures import ProcessPoolExecutor
 
 import numpy as np
@@ -25,9 +24,6 @@ import numpy as np
 import settings
 from errors import ApiError
 
-# pipeline.py / features.py live in the project root, one level above backend/
-if str(settings.PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(settings.PROJECT_ROOT))
 
 # ---------------------------------------------------------------------------
 # Runs inside each worker process. Models are loaded ONCE per process at startup.
@@ -37,8 +33,6 @@ _models = None
 
 def _init_worker(model_dir: str) -> None:
     global _models
-    if str(settings.PROJECT_ROOT) not in sys.path:
-        sys.path.insert(0, str(settings.PROJECT_ROOT))
     from pipeline import load_models
     _models = load_models(model_dir)
     _models["rfr"]["model"].n_jobs = 1   # one core per worker; parallelism comes from the pool
