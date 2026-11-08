@@ -165,38 +165,9 @@ async function handleFileChange(event) {
             onCancel={handleCancel}
             loading={loading}
             serverError={fieldError}
+            onFileChange={handleFileChange}
+            uploadError={uploadError}
           />
-
-          <div className="card stack">
-            <label className="label" htmlFor="file-upload">
-              Or upload a text file
-            </label>
-
-            <p id="file-upload-hint" className="hint">
-              UTF-8 .txt only, up to 32,000 bytes and 10,000 characters.
-              At least 20 words. Selecting a file starts analysis.
-            </p>
-
-            <input
-              id="file-upload"
-              type="file"
-              accept=".txt"
-              onChange={handleFileChange}
-              disabled={loading}
-              aria-invalid={Boolean(uploadError)}
-              aria-describedby={`file-upload-hint${uploadError ? ' file-upload-error' : ''}`}
-            />
-
-            {uploadError && (
-              <p
-                id="file-upload-error"
-                className="field-error"
-                role="alert"
-              >
-                {uploadError}
-              </p>
-            )}
-          </div>
         </div>
 
         <div className="result-panel" aria-live="polite">

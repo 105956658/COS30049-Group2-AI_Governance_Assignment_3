@@ -5,14 +5,17 @@
  * after the first submit attempt, so the user is not told off while still typing.
  * The back end repeats the same checks (security); its message arrives as `serverError`.
  */
-import { useState } from 'react';
-import { Eraser, ScanSearch, X } from 'lucide-react';
+import { useRef, useState } from 'react';
+import { Eraser, ScanSearch, Upload, X } from 'lucide-react';
 
 import { MAX_CHARS, MIN_WORDS, countWords, validateText } from '../../config.js';
 import { SAMPLES } from './samples.js';
 
-export default function TextInputForm({ text, onTextChange, onSubmit, onCancel, loading, serverError }) {
+export default function TextInputForm({
+  text, onTextChange, onSubmit, onCancel, loading, serverError, onFileChange, uploadError,
+}) {
   const [attempted, setAttempted] = useState(false);
+  const fileInputRef = useRef(null);
 
   const words = countWords(text);
   const chars = text.length;
@@ -48,14 +51,40 @@ export default function TextInputForm({ text, onTextChange, onSubmit, onCancel, 
           spellCheck={false}
         />
         <div className="field-footer">
+          {/* Real <button> opens the hidden file input, so it's keyboard-usable and labelled */}
+          <button
+            type="button"
+            className="btn btn-upload"
+            onClick={() => fileInputRef.current?.click()}
+            disabled={loading}
+            aria-describedby="file-upload-hint"
+          >
+            <Upload size={18} aria-hidden="true" /> Upload file
+          </button>
+          <input
+            ref={fileInputRef}
+            id="file-upload"
+            type="file"
+            accept=".txt"
+            hidden
+            onChange={onFileChange}
+          />
           <span id="text-count" className={`counter${chars > MAX_CHARS ? ' counter-over' : ''}`}>
             {words.toLocaleString()} word{words === 1 ? '' : 's'} · {chars.toLocaleString()} /{' '}
             {MAX_CHARS.toLocaleString()} characters
           </span>
         </div>
+        <p id="file-upload-hint" className="hint">
+          Upload accepts a UTF-8 .txt file up to 32,000 bytes. Choosing a file starts the check.
+        </p>
         {error && (
           <p id="text-error" className="field-error" role="alert">
             {error}
+          </p>
+        )}
+        {uploadError && (
+          <p id="file-upload-error" className="field-error" role="alert">
+            {uploadError}
           </p>
         )}
       </div>

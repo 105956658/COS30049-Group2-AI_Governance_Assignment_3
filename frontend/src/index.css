@@ -391,7 +391,10 @@ code {
 
 .field-footer {
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
 }
 
 .counter {
@@ -958,6 +961,18 @@ svg:has(.bar-group.is-active) .bar-group:not(.is-active) .bar {
 .btn-ghost {
   background: transparent;
   border-color: transparent;
+}
+
+/* Upload button beside the text box: tinted so it reads as a real action, not a link */
+.btn-upload {
+  color: var(--color-primary);
+  background: var(--color-primary-soft);
+  border-color: var(--color-primary);
+}
+
+.btn-upload:hover:not(:disabled) {
+  color: var(--color-on-primary);
+  background: var(--color-primary);
 }
 
 .btn-lg {
