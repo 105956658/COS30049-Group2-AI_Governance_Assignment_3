@@ -3,10 +3,12 @@ main.py - TextTrace API (FastAPI).
 
     GET  /api/health   -> is the server up and the model loaded? (used by the header status dot)
     POST /api/predict  -> check a text for AI generation
+    POST /api/predict-file -> check an uploaded .txt file (same response as /api/predict)
+
+Descriptions and examples for every endpoint appear on http://127.0.0.1:8000/docs.
 
 Run from the backend folder:
     uvicorn main:app --port 8000
-(no --reload during the DoS demo - it doesn't mix well with the process pool on Windows)
 """
 import logging
 from contextlib import asynccontextmanager
@@ -28,6 +30,7 @@ from inference import gate
 from limits import BodySizeLimitMiddleware, RateLimiter
 from schemas import (
     ERROR_RESPONSES,
+    FILE_ERROR_RESPONSES,
     HealthResponse,
     PredictRequest,
     PredictResponse,
@@ -45,7 +48,24 @@ async def lifespan(app: FastAPI):
     gate.stop()
 
 
-app = FastAPI(title="TextTrace API", version=settings.MODEL_VERSION, lifespan=lifespan)
+app = FastAPI(
+    title="TextTrace API",
+    version=settings.MODEL_VERSION,
+    lifespan=lifespan,
+    description=(
+        "Estimates how likely a piece of English writing is to be AI-generated.\n\n"
+        "**Limits:** text 20 words to 10,000 characters; `.txt` uploads up to 32,000 bytes; "
+        "request body up to 41,024 bytes; 30 predictions per minute per IP (429); "
+        "at most 6 predictions in flight (503 when busy).\n\n"
+        "**Every error** uses the same JSON shape: "
+        '`{"error": {"code": "...", "message": "...", "details": [{"field": "...", "message": "..."}]}}`.\n\n'
+        "Results are estimates and must not be used to judge real students."
+    ),
+    openapi_tags=[
+        {"name": "Prediction", "description": "Score pasted text or a .txt file."},
+        {"name": "System", "description": "Health check used by the front end's status badge."},
+    ],
+)
 
 # Middleware: the last one added runs first, so CORS wraps everything (errors included).
 app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.MAX_BODY_BYTES)
@@ -64,7 +84,18 @@ app.add_exception_handler(Exception, unhandled_exception_handler)
 rate_limit = RateLimiter(settings.RATE_LIMIT_PER_MINUTE)
 
 
-@app.get("/api/health", response_model=HealthResponse)
+@app.get(
+    "/api/health",
+    response_model=HealthResponse,
+    tags=["System"],
+    summary="Check the server is up and the model is loaded",
+    description=(
+        "Returns `model_loaded: true` once the models have been loaded at start-up. "
+        "The front end calls this to show **Model online** or **Service offline** in the header. "
+        "It never touches the model, so it stays fast even while predictions are running.\n\n"
+        "**Example request:** `GET /api/health` (no body)."
+    ),
+)
 async def health() -> HealthResponse:
     return HealthResponse(status="ok", model_loaded=gate.ready, model_version=settings.MODEL_VERSION)
 
@@ -74,6 +105,16 @@ async def health() -> HealthResponse:
     response_model=PredictResponse,
     responses=ERROR_RESPONSES,
     dependencies=[Depends(rate_limit)],
+    tags=["Prediction"],
+    summary="Check pasted text for AI generation",
+    description=(
+        "Send JSON `{\"text\": \"...\"}`. The text is split into sentences the same way as in training. "
+        "The calibrated LinearSVC scores each sentence, the GMM adds style-cluster posteriors, and the "
+        "random-forest regressor turns these into one document-level `ai_score` with a `score_range`. "
+        "The text is processed in memory and never stored.\n\n"
+        "Cheap checks run first: over 10,000 characters returns 413, and under 20 words returns 422, "
+        "so bad input never reaches the model."
+    ),
 )
 async def predict(req: PredictRequest) -> PredictResponse:
     text = req.text
@@ -108,16 +149,23 @@ async def predict(req: PredictRequest) -> PredictResponse:
 @app.post(
     "/api/predict-file",
     response_model=PredictResponse,
-    responses={
-        **ERROR_RESPONSES,
-        415: {
-            "description": "Unsupported file type, encoding, or content."
-        },
-    },
+    responses=FILE_ERROR_RESPONSES,
     dependencies=[Depends(rate_limit)],
+    tags=["Prediction"],
+    summary="Check an uploaded .txt file for AI generation",
+    description=(
+        "Send one UTF-8 `.txt` file as multipart form data in the field `file` (max 32,000 bytes). "
+        "`upload_security.py` checks the file name, size and actual bytes before the model runs; the "
+        "declared MIME type is not trusted, and the file is never saved or executed. The text then goes "
+        "through the same checks and model as `/api/predict`, and the response is identical.\n\n"
+        "**Example request:**\n"
+        "```\n"
+        'curl -X POST http://127.0.0.1:8000/api/predict-file -F "file=@essay.txt;type=text/plain"\n'
+        "```"
+    ),
 )
 async def predict_file(
-    file: UploadFile = File(...),
+    file: UploadFile = File(..., description="A UTF-8 plain-text .txt file, up to 32,000 bytes."),
 ) -> PredictResponse:
     text = await read_safe_text_file(file)
     return await predict(PredictRequest(text=text))
