@@ -2,25 +2,24 @@
 
 A web application that estimates how likely a piece of writing is to be AI-generated. A user pastes text or uploads a `.txt` file. The FastAPI back end runs our trained model pipeline and returns a document-level score plus per-sentence scores. The React front end shows these as interactive charts.
 
-**Who it's for:** teachers and students who want a second opinion on whether a piece of writing *looks* machine-written. It is a learning project, not a disciplinary tool. See [Limitations]
-
+**Who it's for:** teachers and students who want a second opinion on whether a piece of writing *looks* machine-written. It is a learning project, not a disciplinary tool. See [Limitations and next steps](#limitations-and-next-steps).
 
 ---
 
 ## Contents
-1. [Architecture]
-2. [Setup and run]
-3. [Pinned dependency versions]
-4. [API documentation]
-5. [Threat model]
-6. [Security hygiene]
-7. [Defences Chosen]
-8. [Innovation defence 1: Unsafe file upload]
-9. [Innovation defence 2: Denial of service]
-10. [Advanced security: Detection evasion]
-11. [Limitations and next steps]
-12. [Generative AI statement]
-13. [References]
+1. [Architecture](#architecture)
+2. [Setup and run](#setup-and-run)
+3. [Pinned dependency versions](#pinned-dependency-versions)
+4. [API documentation](#api-documentation)
+5. [Threat model](#threat-model)
+6. [Security hygiene](#security-hygiene)
+7. [Defences chosen](#defences-chosen)
+8. [Innovation defence 1: Unsafe file upload](#innovation-defence-1-unsafe-file-upload)
+9. [Innovation defence 2: Denial of service](#innovation-defence-2-denial-of-service)
+10. [Advanced security: Detection evasion](#advanced-security-detection-evasion)
+11. [Limitations and next steps](#limitations-and-next-steps)
+12. [Generative AI statement](#generative-ai-statement)
+13. [References](#references)
 
 ---
 
@@ -69,141 +68,151 @@ flowchart LR
 4. `pipeline.py` splits the text into sentences and builds the same features used in training (`features.py`). The sentence classifier scores each sentence, the GMM assigns a cluster, and the regressor turns these into one document-level score.
 5. The back end returns `PredictResponse` as JSON, and the front end renders the score, confidence and charts.
 
+**Repository layout**
+
+| Folder | Contents |
+| --- | --- |
+| `backend/` | FastAPI app. The trained models it loads are already included in `backend/models/`. |
+| `frontend/` | React + Vite front end. |
+| `model_training/` | EDA notebook, training and evaluation scripts, evasion experiments and their results. Only needed to retrain. |
 
 ---
 
 ## Setup and run
 
-You need **Miniconda or Anaconda** (back end and model training) and **Node.js 20.19 or newer** (front end). Every command is run from the repository root unless it says `cd`.
+You need **Python 3.13** and **Node.js 20.19 or newer**. The trained models are already in `backend/models/`, so **to run the application you only need steps 1, 2 and 3**. Steps 4–6 are only needed to retrain the models.
 
 ### 1. Back-end environment
 
->> conda create -n ai-detect python=3.13 -y
->> conda activate ai-detect
+From the repository root (Windows PowerShell):
 
-# Core ML libraries
->> conda install -c conda-forge pandas=3.0.6 numpy=2.5.3 scikit-learn=1.9.1 lightgbm=4.7.0 joblib=1.6.0 -y
+```powershell
+python -m venv .venv
+.venv\Scripts\activate
+pip install -r requirements.txt
+```
 
-# Web API
->> pip install fastapi==0.143.0 uvicorn==0.54.0 python-multipart==0.0.32 python-dotenv==1.2.4 httpx==0.28.1
+On macOS/Linux, activate with `source .venv/bin/activate` instead. `requirements.txt` pins every package version.
 
-# EDA notebook and plots only
->> conda install -c conda-forge matplotlib seaborn jupyter -y
+Conda works too:
 
+```powershell
+conda create -n ai-detect python=3.13 -y
+conda activate ai-detect
+pip install -r requirements.txt
+```
 
+### 2. Start the back end
 
-### 2. Data
+```powershell
+cd backend
+uvicorn main:app --host 127.0.0.1 --port 8000
+```
 
-The `data/` folder is gitignored because the raw CSVs are too large for GitHub (one is over the 100 MB limit). Download these three Kaggle datasets and put the CSVs directly in `data/`:
+Open http://127.0.0.1:8000/docs to see the interactive API documentation. A quick check from a second terminal:
 
-| Dataset | File to place in `data/` |
-| --- | --- |
-| [DAIGT V2 Train Dataset](https://www.kaggle.com/datasets/thedrcat/daigt-v2-train-dataset) | `train_v2_drcat_02.csv` |
-| [AI Vs Human Text](https://www.kaggle.com/datasets/shanegerami/ai-vs-human-text) | `AI_Human.csv` |
-| [AI vs Human Text Classification Dataset 2026](https://www.kaggle.com/datasets/alitaqishah/ai-vs-human-text-classification-dataset-2026) | TODO: exact file name |
+```powershell
+curl.exe http://127.0.0.1:8000/api/health
+```
 
-### 3. Process the data
+It should return `{"status":"ok","model_loaded":true,...}`.
 
-Run the notebook top to bottom. It writes the train, validation, test and `holdout_2026` splits to `data/splits/`.
-
-
->> jupyter notebook eda.ipynb
-
-
-### 4. Train the models
-
-Run these in order, because each step uses the outputs of the previous one. All scripts use fixed random seeds.
-
-
-# Sentence classifiers: logistic regression vs calibrated LinearSVC
->> python classifier.py --model logreg --out models/clf_logreg.joblib
->> python classifier.py --model svc --out models/clf_svc.joblib
-
-# The LinearSVC won, so copy it to the name the pipeline loads
->> copy models\clf_svc.joblib models\classifier.joblib
-
-# Innovation comparison: LightGBM on the same sentences (not deployed)
-# (early stopping uses 5,000 documents held back from the training split)
->> python lgbm_classifier.py               # -> models/clf_lgbm.joblib
-
-# GMM clustering on AI training sentences only (k = 6, full covariance)
-# Also saves the BIC curve and cluster profile tables
->>python gmm.py --k 6                     # -> models/gmm.joblib
-
-# Document-level regressor, fitted on the VALIDATION split
-# (documents the classifier and GMM never saw), evaluated on test + holdout_2026
->> python regressor.py                     # -> models/regressor.joblib
-
-
-Quick check from the command line:
-
-
->> python pipeline.py --text "Paste the text you want to check here."
-
-
-### 5. Start the back end
-
-Open a terminal:
-
-
->> conda activate ai-detect
->> cd backend                                          
->> uvicorn main:app --host 127.0.0.1 --port 8000        
-
-
-Open http://127.0.0.1:8000/docs to see the interactive API documentation.
-
-Optional environment variables:
+Optional environment variables (copy `backend/.env.example` to `backend/.env` to set them; every one has a safe default):
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `ALLOWED_ORIGINS` | `http://localhost:3000,http://127.0.0.1:3000` | Comma-separated CORS allow-list |
+| `MAX_CHARS` / `MIN_WORDS` | `10000` / `20` | Text limits (keep in sync with `frontend/src/config.js`) |
 | `DOS_PROTECTION` | `on` | `off` runs the unprotected version, only for the "before" DoS measurement |
 | `INFERENCE_WORKERS` / `INFERENCE_QUEUE` | `2` / `4` | Worker processes running the model / extra requests allowed to wait |
 | `INFERENCE_TIMEOUT` | `15` | Seconds before a prediction returns 503 |
 | `RATE_LIMIT_PER_MINUTE` | `30` | Prediction requests per client IP per minute (`0` = off) |
 
+### 3. Start the front end
 
-### 6. Start the front end (React)
+Open a **second** terminal and leave the back end running in the first. Check your Node version (tested on Node 24.21.0):
 
-The web interface is in the `frontend/` folder. It is built with React 19 and Vite, and talks to the FastAPI back end through the `/api` path. More detail (folder structure, API contract, error format) is in [`frontend/README.md`](frontend/README.md).
+```powershell
+node -v
+```
 
-Open a **second** terminal (leave the back end running in the first).
+Install the exact package versions from `package-lock.json` (first time only), then start the development server:
 
-**1. Install Node.js 20.19 or newer, then check the version** (tested on Node 24.21.0):
+```powershell
+cd frontend
+npm ci
+npm run dev
+```
 
->> node -v
+Open http://localhost:3000. Press `Ctrl + C` to stop the server. It must run on port 3000, because that is the origin allowed by CORS. If port 3000 is already in use, it stops with an error instead of switching ports.
 
+**Connecting to the back end.** In development, every request to `/api` is forwarded to the FastAPI server at `http://127.0.0.1:8000`, so **start the back end first**. The header shows **"Model online"** when the back end is reachable and **"Service offline"** when it is not.
 
-**2. Install the front-end packages** (exact versions from `package-lock.json`; first time only):
-
-
->> cd frontend
->> npm ci
-
-
-**3. Start the development server**, then open http://localhost:3000 in a browser:
-
->> npm run dev
-
-Press `Ctrl + C` in the terminal to stop it. The server must run on port 3000, because that is the origin allowed by CORS. If port 3000 is already in use, it stops with an error instead of switching ports.
-
-#### Connecting to the back end
-In development, every request to `/api` is forwarded to the FastAPI server at `http://127.0.0.1:8000`, so **start the back end first** (step 5). The header shows **"Model online"** when the back end is reachable and **"Service offline"** when it is not.
-
-#### Demo mode (front end only, no back end)
-To work on the interface without the back end, create a file named `.env.local` inside the `frontend/` folder containing:
+**Demo mode (front end only, no back end).** To work on the interface without the back end, create `frontend/.env.local` containing:
 
 ```
 VITE_USE_MOCK=true
 ```
 
-Then restart `npm run dev`. A **"Demo data"** badge appears in the header, and results come from a simple word-pattern heuristic in `src/api/mock.js`, **not** the trained model. Delete `.env.local` (or set the value to `false`) and restart to use the real model.
+Then restart `npm run dev`. A **"Demo data"** badge appears in the header, and results come from a simple word-pattern heuristic in `src/api/mock.js`, **not** the trained model. Delete `.env.local` (or set the value to `false`) and restart to use the real model. File uploads always use the real back end, even in demo mode.
 
-File uploads always use the real back end, even in demo mode, so start FastAPI to test file uploads.
+More detail on the front end (folder structure, API contract, error format) is in [`frontend/README.md`](frontend/README.md).
 
+### 4. (Retraining only) Extra packages and data
+
+```powershell
+pip install matplotlib seaborn jupyter
+```
+
+The raw datasets are too large for GitHub (one is over the 100 MB limit), so they are not included. Download these three Kaggle datasets and put the CSVs in `model_training/data/`:
+
+| Dataset | File to place in `model_training/data/` |
+| --- | --- |
+| [DAIGT V2 Train Dataset](https://www.kaggle.com/datasets/thedrcat/daigt-v2-train-dataset) | `train_v2_drcat_02.csv` |
+| [AI Vs Human Text](https://www.kaggle.com/datasets/shanegerami/ai-vs-human-text) | `AI_Human.csv` |
+| [AI vs Human Text Classification Dataset 2026](https://www.kaggle.com/datasets/alitaqishah/ai-vs-human-text-classification-dataset-2026) | `ai_vs_human_text_2026.csv` |
+
+### 5. (Retraining only) Process the data
+
+Run the notebook top to bottom. It writes the train, validation, test and `holdout_2026` splits to `model_training/data/splits/`.
+
+```powershell
+cd model_training
+jupyter notebook eda.ipynb
+```
+
+### 6. (Retraining only) Train the models
+
+Run these from inside `model_training/`, in order, because each step uses the outputs of the previous one. All scripts use fixed random seeds. The GMM and regressor scripts read from and write to `backend/models/` by default.
+
+```powershell
+# Sentence classifiers: logistic regression vs calibrated LinearSVC
+python classifier.py --model logreg --out models/clf_logreg.joblib
+python classifier.py --model svc --out models/clf_svc.joblib
+
+# The LinearSVC won, so copy it to the name the pipeline loads
+copy models\clf_svc.joblib ..\backend\models\classifier.joblib
+
+# Innovation comparison: LightGBM on the same sentences
+# (early stopping uses 5,000 documents held back from the training split)
+python lgbm_classifier.py                 # -> models/clf_lgbm.joblib
+
+# GMM clustering on AI training sentences only (k = 6, full covariance)
+# Also saves the BIC curve and cluster profile tables
+python gmm.py --k 6                       # -> ../backend/models/gmm.joblib
+
+# Document-level regressor, fitted on the VALIDATION split
+# (documents the classifier and GMM never saw), evaluated on test + holdout_2026
+python regressor.py                       # -> ../backend/models/regressor.joblib
+```
+
+Restart the back end afterwards so it loads the new models.
+
+---
 
 ## Pinned dependency versions
+
+All back-end versions are pinned in `requirements.txt`; front-end versions are pinned exactly in `package.json` and `package-lock.json` (`.npmrc` sets `save-exact=true`).
 
 **Back end / ML (Python 3.13)**
 
@@ -215,6 +224,8 @@ File uploads always use the real back end, even in demo mode, so start FastAPI t
 | lightgbm | 4.7.0 |
 | joblib | 1.6.0 |
 | fastapi | 0.143.0 |
+| starlette | 1.8.0 |
+| pydantic | 2.14.1 |
 | uvicorn | 0.54.0 |
 | python-multipart | 0.0.32 |
 | python-dotenv | 1.2.4 |
@@ -232,6 +243,7 @@ File uploads always use the real back end, even in demo mode, so start FastAPI t
 | @vitejs/plugin-react | 6.1.1 |
 
 ---
+
 ## API documentation
 
 FastAPI generates interactive documentation at http://127.0.0.1:8000/docs. Every endpoint has a description and an example request and response, including the error responses.
@@ -242,9 +254,9 @@ FastAPI generates interactive documentation at http://127.0.0.1:8000/docs. Every
 | POST | `/api/predict` | Scores pasted text sent as JSON `{ "text": "..." }`. | `predict(text)` |
 | POST | `/api/predict-file` | Scores an uploaded `.txt` file (multipart form, field `file`). | `predictFile(file)` |
 
-Example response from POST /api/predict:
+Example response from `POST /api/predict`:
 
-json
+```json
 {
   "label": "ai",
   "confidence": 0.87,
@@ -257,17 +269,29 @@ json
   "word_count": 23,
   "model_version": "svc-gmm-rfr-1.0"
 }
+```
 
-Error format. Every error uses one JSON shape, with no stack traces or internal details. details lists field-level problems for validation errors and is empty otherwise:
+**Error format.** Every error uses one JSON shape, with no stack traces or internal details. `details` lists field-level problems for validation errors and is empty otherwise:
 
-json
+```json
 {
   "error": {
     "code": "text_too_long",
-    "message": "Text must be at most 10000 characters.",
-    "details": [{ "field": "text", "message": "Text must be at most 10000 characters." }]
+    "message": "Text must be at most 10,000 characters.",
+    "details": [{ "field": "text", "message": "Text must be at most 10,000 characters." }]
   }
 }
+```
+
+| Status | When | Example `code` |
+| --- | --- | --- |
+| 404 / 405 | Unknown endpoint or wrong method | `http_404`, `http_405` |
+| 413 | Text over 10,000 characters, file over 32,000 bytes, or body over 41,024 bytes | `text_too_long`, `file_too_large`, `payload_too_large` |
+| 415 | Not a `.txt` file, unsafe file name, not UTF-8, or binary content | `unsupported_file_type`, `invalid_encoding`, `invalid_file_content` |
+| 422 | Invalid JSON, wrong or extra fields, too few words, empty file, nothing scorable | `validation_error`, `text_too_short`, `empty_file`, `no_scorable_sentences` |
+| 429 | More than 30 predictions per minute from one IP (with `Retry-After`) | `rate_limited` |
+| 500 | Any unexpected error (details logged on the server only) | `internal_error` |
+| 503 | All inference slots busy, or prediction took over 15 s (with `Retry-After`) | `server_busy`, `processing_timeout` |
 
 ### How the front end talks to the API
 All calls go through `frontend/src/api/`:
@@ -285,9 +309,9 @@ All calls go through `frontend/src/api/`:
 - **Anyone who can reach the API.** The API has no login, so any script or bot can call `/api/predict` and `/api/predict-file` directly, without going through the front end.
 
 ### 2. What are they trying to achieve?
-- **Evade detection:** change AI text just enough that the model scores it as human (see [Advanced security]).
+- **Evade detection:** change AI text just enough that the model scores it as human (see [Advanced security](#advanced-security-detection-evasion)).
 - **Make the service unavailable:** for example, flooding the prediction endpoint so that real users (teachers checking work near a deadline) get timeouts.
-- **Abuse the upload path:** send oversized files, path-traversal file names or binary content to crash the server or reach the file system.
+- **Abuse the upload path:** send oversized files, path-traversal file names or binary content to exhaust memory, crash the server or reach the file system.
 
 ### 3. What can they actually do to it?
 - **Bypass all front-end checks** by calling the API with `curl` or a script. So every limit is also enforced on the back end.
@@ -296,11 +320,19 @@ All calls go through `frontend/src/api/`:
 - **Rewrite their own text** (change case, strip punctuation, paraphrase) to hide the features the model relies on. This is the detection-evasion attack.
 - **Privacy risk to users:** essays often contain names, student IDs or contact details. The back end does not store submitted text or files after the response is sent. Server logs record only the method and path of unexpected errors, never the submitted text, and validation errors never echo the input back. The front end keeps results only in `sessionStorage`, which is cleared when the tab closes.
 
-### Section 2.7 risks: which apply
+### Section 2.7 risks: which apply to this design
+
 | Risk | Applies? | Why |
 | --- | --- | --- |
-| Unsafe file upload | **Yes** | We accept user files at `/api/predict-file`. |
-| Denial of service | **Yes** | Public, unauthenticated, CPU-heavy inference endpoint. |
+| Unsafe file upload | **Yes – chosen** | We accept user files at `/api/predict-file`. |
+| Denial of service | **Yes – chosen** | Public, unauthenticated, CPU-heavy inference endpoint. |
+| Missing rate limiting | Yes – covered inside the DoS defence | Anyone can probe the detector repeatedly. Our per-IP limit (`limits.py`) is one layer of the DoS defence, not a separate marked defence. |
+| Unsafe model loading | Yes – not chosen | We load `.joblib` files, which can run code when loaded. The risk is low here because the models ship in the repository and are loaded from a fixed path, with no download script; it would matter if models came from an outside source. |
+| Misconfiguration and vulnerable dependencies | Yes – not chosen | Applies to every app. `npm audit` reports 0 vulnerabilities; CORS and request limits are set explicitly. |
+| Command injection | No | The back end never runs a system command. |
+| SQL injection | No | There is no database; nothing is stored. |
+| Server-side request forgery | No | The back end never makes an outbound request based on user input. |
+| Broken access control | No | There are no user accounts or per-user records. |
 
 ---
 
@@ -309,52 +341,60 @@ All calls go through `frontend/src/api/`:
 - **Safe text rendering:** submitted sentences are rendered as React text children, never interpreted as HTML (no `dangerouslySetInnerHTML`).
 - **Back-end input limits:** text is limited to 10,000 characters; uploaded files to 32,000 bytes; the total request body to 41,024 bytes. The back end enforces these limits independently of the front end.
 - **Restricted CORS:** the default allowed origins are exactly `http://localhost:3000` and `http://127.0.0.1:3000`, configurable through `ALLOWED_ORIGINS`. CORS controls browser access only; it is not authentication.
-- **Secret handling:** local `.env` files and private-key file patterns are in `.gitignore`. `VITE_*` variables are public build settings and never contain secrets. Gitleaks scans of the working tree and the full Git history found no secrets.
+- **Secret handling:** the app has no secrets. All settings come from environment variables (`backend/settings.py`), local `.env` files and private-key file patterns are in `.gitignore`, and only `.env.example` files are committed. `VITE_*` variables are public build settings and never contain secrets. Gitleaks scans of the working tree and the full Git history found no secrets.
 
 CORS preflight tests returned HTTP 200 for `http://localhost:3000` and HTTP 400 ("Disallowed CORS origin") for `https://example.com`.
 
 ---
 
-## Defences Chosen
+## Defences chosen
 
 | Section | Defence | Where in the code |
 | --- | --- | --- |
-| 2.7 Innovation defence 1 | **Unsafe file upload** | `backend/upload_security.py` |
-| 2.7 Innovation defence 2 | **Denial of service** | `backend/inference.py` (`InferenceGate`), `backend/limits.py` (`RateLimiter`), settings in `backend/settings.py`; demo script `backend/dos_demo.py` |
-| 2.8 Advanced security | **Detection evasion** (case and punctuation stripping) with balanced adversarial retraining | `evasion_retrain.py`, `evasion_run.py`, `evasion_eval.py` |
+| 2.7 Innovation defence 1 | **Unsafe file upload** | `backend/upload_security.py`, `BodySizeLimitMiddleware` in `backend/limits.py` |
+| 2.7 Innovation defence 2 | **Denial of service** | `backend/inference.py` (`InferenceGate`), `backend/limits.py` (`RateLimiter`, `BodySizeLimitMiddleware`), settings in `backend/settings.py`; demo script `backend/dos_demo.py` |
+| 2.8 Advanced security | **Detection evasion** (case and punctuation stripping) with balanced adversarial retraining | `model_training/evasion_lib.py`, `evasion_retrain.py`, `evasion_run.py`, `evasion_eval.py` |
 
 ---
 
 ## Innovation defence 1: Unsafe file upload
 
 ### Threat and defence
-An attacker can bypass browser validation and send oversized files, crafted file names, or binary content disguised as plain text directly to `POST /api/predict-file`.
+An attacker can bypass browser validation and send oversized files, crafted file names, or binary content disguised as plain text directly to `POST /api/predict-file`. FastAPI does none of these checks by default: `UploadFile` accepts any file name, any declared MIME type and any size.
 
 `backend/upload_security.py` validates every upload before model inference:
-- Accepts only file names ending in `.txt` (case-insensitive).
+- Accepts only file names ending in `.txt` (case-insensitive), so `evil.exe` and `evil.txt.exe` are rejected.
 - Rejects file names containing `/`, `\` or ASCII control characters below 32.
-- Reads at most 32,001 bytes and rejects files larger than 32,000 bytes, so a huge file is never fully read into memory.
-- Decodes the actual bytes as UTF-8 (BOM allowed). It does not trust the declared MIME type.
+- Reads at most 32,001 bytes and rejects files larger than 32,000 bytes, so a huge file is never fully read into memory. `BodySizeLimitMiddleware` also rejects any request body over 41,024 bytes before it is parsed.
+- Decodes the actual bytes as UTF-8 (BOM allowed). It does not trust the declared MIME type, so a PNG, PDF or UTF-16 file renamed to `.txt` is rejected.
 - Rejects unsupported control characters, empty files and whitespace-only content.
 - Applies the same character limit and minimum word count as `/api/predict`.
-- Closes the upload in a `finally` block. The application never saves uploads to a user-supplied path or executes them (multipart parsing may use temporary storage).
+- Closes the upload in a `finally` block. The application never saves uploads to disk under a user-supplied name, and never executes them (multipart parsing may use temporary storage). This is why a crafted file name cannot write outside a folder even if it got past the name check: the name is only validated, never used as a path.
 
 ### Direct API test results
-Tested with `curl.exe` against our own application at `http://127.0.0.1:8000` on 27 October 2026, bypassing the front end.
+Tested with `curl.exe` against our own application at `http://127.0.0.1:8000`, bypassing the front end.
 
 | Test | Submitted input | Observed response |
 | --- | --- | --- |
 | Oversized file | 32,001 ASCII bytes in `large.txt` | HTTP 413 `file_too_large` |
 | Crafted file name | Plain text with `filename=../test.txt` | HTTP 415 `unsupported_file_type` |
+| Crafted file name (Windows) | Plain text with `filename=..\..\x.txt` | HTTP 415 `unsupported_file_type` |
+| Wrong extension | Plain text with `filename=evil.txt.exe` | HTTP 415 `unsupported_file_type` |
 | Disguised binary | Bytes 0, 1, 2, 3 in `fake.txt`, declared `text/plain` | HTTP 415 `invalid_file_content` |
+| Disguised image / PDF | PNG or PDF bytes renamed to `.txt` | HTTP 415 `invalid_encoding` |
 
-All three requests were rejected before model inference.
+All of these requests were rejected before model inference.
 
-TODO: add the result of the same three requests against the unprotected version, once recorded for the video.
+```powershell
+curl.exe -X POST http://127.0.0.1:8000/api/predict-file -F "file=@large.txt"
+curl.exe -X POST http://127.0.0.1:8000/api/predict-file -F "file=@essay.txt;filename=../test.txt"
+curl.exe -X POST http://127.0.0.1:8000/api/predict-file -F "file=@fake.txt;type=text/plain"
+```
 
 ### Trade-offs and limitations
 - Only UTF-8 plain text is supported. PDF, Word and other encodings must be converted first.
 - The content check is not an antivirus scan. HTML-like text that is valid plain text is accepted, but it is rendered as text, not HTML.
+- A URL-encoded name such as `..%2f..%2fx.txt` passes the name check. It is harmless because file names are never used as paths, but the check could be tightened to reject `..` and `%`.
 - Each upload costs one bounded read and a content scan before inference. In return, file formats and sizes are restricted.
 
 ---
@@ -362,7 +402,7 @@ TODO: add the result of the same three requests against the unprotected version,
 ## Innovation defence 2: Denial of service
 
 ### Threat
-`/api/predict` and `/api/predict-file` need no login, and every request runs the full model pipeline on the CPU. In a naive FastAPI app, the model is called directly inside the `async` endpoint. That blocks FastAPI's single event loop for the whole prediction, so while one request is being scored, the server cannot answer anyone else, not even `/api/health`. An attacker who sends many large but valid texts at once builds up a backlog with no limit. Every real user waits behind it and gets slow responses, timeouts or "Service offline".
+`/api/predict` and `/api/predict-file` need no login, and every request runs the full model pipeline on the CPU. In a naive FastAPI app, the model is called directly inside the `async` endpoint. That blocks FastAPI's single event loop for the whole prediction, so requests can only be handled one at a time. An attacker who sends many large but valid texts at once builds up a backlog with no limit, and every real user waits behind it.
 
 Setting `DOS_PROTECTION=off` runs exactly this unprotected version. We use it only for the "before" measurement.
 
@@ -372,40 +412,60 @@ Every prediction goes through `InferenceGate` in `backend/inference.py`:
 - **Load shedding with a fixed number of slots.** Capacity is 2 workers + 4 queued = **6** predictions in flight. When all 6 are taken, a new request is rejected immediately with **HTTP 503** `server_busy` and `Retry-After: 5`, instead of joining a queue that never ends.
 - **Timeout.** A prediction that takes longer than **15 s** returns **HTTP 503** `processing_timeout`. The slot is freed only when the worker actually finishes, so a timed-out request can't let new work in while the CPU is still busy with the old one.
 - **Per-IP rate limit** (`RateLimiter` in `backend/limits.py`). This is a sliding one-minute window per client IP on both prediction endpoints. The 31st request within a minute gets **HTTP 429** `rate_limited`, with a `Retry-After` header saying when to try again.
-- **Body size limit.** `BodySizeLimitMiddleware` (also in `limits.py`) rejects request bodies over 41,024 bytes with 413 before they are parsed. It counts bytes as they arrive, so leaving out `Content-Length` doesn't get around it.
+- **Body size limit.** `BodySizeLimitMiddleware` (also in `limits.py`) rejects request bodies over 41,024 bytes with 413 before they are parsed. It counts bytes as they arrive, so leaving out `Content-Length` (a chunked upload) doesn't get around it.
 
 Every rejection uses the shared error format, and the front end shows it in the result panel with **Try again**.
 
 ### Test results
-Measured with `backend/dos_demo.py` against our own server at `http://127.0.0.1:8000`. Both runs used `RATE_LIMIT_PER_MINUTE=0`, so the rate limiter didn't answer the flood with 429s before the inference gate was reached. The script runs two tests:
+Measured with `backend/dos_demo.py` against our own server at `http://127.0.0.1:8000`. Both versions were run with `RATE_LIMIT_PER_MINUTE=0`, so the rate limiter didn't answer the flood with 429s before the inference gate was reached. The script runs two tests:
 - **Expensive request:** one maximum-size (10,000-character) prediction, while a "normal user" keeps calling `/api/health` and a small `/api/predict`.
-- **Flood:** 50 simultaneous 5,000-character predictions, with a `/api/health` call 0.3 s in.
+- **Flood:** many simultaneous 5,000-character predictions, with a `/api/health` call 0.3 s in.
 
->> cd backend
->> $env:DOS_PROTECTION="off"; $env:RATE_LIMIT_PER_MINUTE="0"; uvicorn main:app --port 8000
->> python dos_demo.py --label before
->> $env:DOS_PROTECTION="on"; $env:RATE_LIMIT_PER_MINUTE="0"; uvicorn main:app --port 8000
->> python dos_demo.py --label after
+```powershell
+cd backend
+# "before": unprotected server
+$env:DOS_PROTECTION="off"; $env:RATE_LIMIT_PER_MINUTE="0"; uvicorn main:app --port 8000
+python dos_demo.py --label before          # in a second terminal
 
-Run `dos_demo.py` in a second terminal while the server is running, and restart the server between the two runs. Results are appended to `results/dos_results.csv`. That folder is gitignored, so the numbers are copied here:
+# "after": restart the server with protection on
+$env:DOS_PROTECTION="on"; $env:RATE_LIMIT_PER_MINUTE="0"; uvicorn main:app --port 8000
+python dos_demo.py --label after
+```
+
+Results are appended to `backend/results/dos_results.csv`. That folder is gitignored, so the numbers are copied here.
+
+**First comparison (flood of 50):**
 
 | Measure | Unprotected | Protected |
 | --- | --- | --- |
-| `/api/health` while one max-size prediction runs (median) | 151 ms | **14 ms** |
-| Small `/api/predict` while one max-size prediction runs (median) | 149 ms | **81 ms** |
-| Flood of 50: predictions completed / rejected with 503 | 50 / 0 | **21 / 29** |
-| Flood of 50: time until every request was answered | 6.4 s | **0.72 s** |
-| Flood of 50: slowest completed prediction | 6,304 ms | **651 ms** |
-| Flood of 50: median time to receive a 503 | – | **295 ms** |
-| Flood of 50: `/api/health` for a normal user during the flood | **5,404 ms** | **270 ms** |
+| `/api/health` while one max-size prediction runs | 151 ms | **14 ms** |
+| Small `/api/predict` while one max-size prediction runs | 149 ms | **81 ms** |
+| Predictions completed / rejected with 503 | 50 / 0 | **21 / 29** |
+| Time until every request was answered | 6.4 s | **0.72 s** |
+| Slowest completed prediction | 6,304 ms | **651 ms** |
+| Median time to receive a 503 | – | **295 ms** |
+| `/api/health` for a normal user during the flood | 5,404 ms | **270 ms** |
 
-**What this shows.** Unprotected, the model ran on the event loop, so during the flood a normal user's health check waited 5.4 s behind the attacker's backlog, and the last prediction took 6.3 s. 5.4 s is longer than the front end's 5 s health-check timeout, so a real user's header would have switched to "Service offline". Protected, the server stayed responsive (health check 270 ms, 20 times faster). The gate accepted only what the workers could handle and turned the other 29 requests away in about 0.3 s each, instead of letting them pile up. The cost is that those 29 got a 503 and would need to retry.
+**Repeated unprotected runs at larger flood sizes:**
 
-**Rate limit check.** With `RATE_LIMIT_PER_MINUTE=30`, sending 31 small predictions in a row should give thirty 200s and then a 429 with `Retry-After`:
+| Flood size | Time until every request was answered | Slowest completed prediction | `/api/health` during the flood |
+| --- | --- | --- | --- |
+| 50 | 1.99 s | 1,919 ms | 232 ms |
+| 50 | 2.82 s | 2,431 ms | 236 ms |
+| 150 | 7.52 s | 6,474 ms | 81 ms |
+| 150 | 17.78 s | 17,076 ms | 325 ms |
+| 200 | 27.29 s | 26,074 ms | 556 ms |
 
->> $body = '{"text":"The committee reviewed the proposal carefully and agreed to revisit it next month. Several members raised concerns about the budget."}'
->> 1..31 | % { try { (Invoke-WebRequest http://127.0.0.1:8000/api/predict -Method POST -ContentType 'application/json' -Body $body).StatusCode } catch { $_.Exception.Response.StatusCode.value__ } }
+**What this shows.** Without protection, every request in the flood is accepted and queued, so the backlog grows with the size of the attack: the last prediction took about 2 s for a flood of 50, up to 17 s for 150 and 26 s for 200. A real user's prediction submitted during the flood would wait behind all of it, and past 20 s the front end gives up with a timeout. With protection, the gate accepts only what the workers can handle, answers the rest with a 503 in about 0.3 s, and the slowest accepted prediction stayed under 1 s.
 
+The 5.4 s health-check delay in the first run did **not** repeat: in the later unprotected runs the health check took 81–556 ms, because the event loop can fit the quick health request in between predictions. So the clear and repeatable harm is the unbounded backlog for predictions, not the health check. One further run, logged as an unprotected run, is left out of this table because 66 of its requests received a 503, which only happens with the protection on.
+
+**Rate limit check.** With `RATE_LIMIT_PER_MINUTE=30`, sending 31 small predictions in a row gives thirty 200s and then a 429 with `Retry-After`:
+
+```powershell
+$body = '{"text":"The committee reviewed the proposal carefully and agreed to revisit it next month. Several members raised concerns about the budget and the timeline for delivery."}'
+1..31 | % { try { (Invoke-WebRequest http://127.0.0.1:8000/api/predict -Method POST -ContentType 'application/json' -Body $body).StatusCode } catch { $_.Exception.Response.StatusCode.value__ } }
+```
 
 ### Trade-offs and limitations
 - **Real users can be turned away.** When all 6 slots are full, legitimate requests get 503 too and must retry. The service stays up, but it serves fewer people at once. The numbers suit a 2-core laptop and can be changed with environment variables.
@@ -413,7 +473,7 @@ Run `dos_demo.py` in a second terminal while the server is running, and restart 
 - **A timed-out prediction still uses its worker** until it finishes, because a running prediction can't be safely killed mid-way. The client still gets its 503 on time.
 - **The rate limit is per IP and kept in memory.** Users behind one shared IP (a school network) share one limit. The counts reset when the server restarts and are not shared across several server instances. Many IPs together (a distributed attack) get past the rate limit. The gate still caps CPU use, so the server stays up, but real users would see more 503s.
 - **Local testing caveat:** the attack script and a "normal user" on the same laptop share the IP `127.0.0.1`, so the rate limit would block both. That's why the flood was measured with the rate limit off and the rate limit was checked separately.
-- **One measurement per version.** Each number comes from a single run on one laptop. Exact timings will vary between machines and runs, although the gap between the two versions is large.
+- **Measurement limits.** All runs were on one laptop, and run-to-run variation is large (two unprotected floods of 150 took 7.5 s and 17.8 s). The direction of the result was the same in every run.
 
 ---
 
@@ -440,8 +500,11 @@ Run `dos_demo.py` in a second terminal while the server is running, and restart 
 
 **Limitations.** The detector does not generalise to holdout_2026 (clean FPR 0.95), and only one attack family was tested.
 
-**Reproduce.**
-```bash
+**Reproduce.** Run from inside `model_training/` (needs the data from setup steps 4–5):
+
+```powershell
+cd model_training
+
 # 1. AI-only retrained detector (evaluation loads it from models_adv/)
 python evasion_retrain.py --mode ai_only
 
@@ -454,16 +517,46 @@ python evasion_run.py --dataset holdout_2026
 #    All tables are written to results/evasion/.
 python evasion_eval.py
 ```
+
 ---
 
-## Limitations
+## Limitations and next steps
 
+### Limitations
+- **False positives on newer and informal writing.** On the `holdout_2026` dataset, 95% of human texts are wrongly flagged as AI. Casual, first-person writing (such as the "Personal note" sample in the app) can also be scored as AI. Results must never be used to judge real students.
 - The model was trained mostly on essay-style English. Other genres and languages are untested.
-- Only plain-text uploads are supported.
-- There is no authentication, so rate limiting is per client address only. 
+- Only UTF-8 plain-text uploads are supported.
+- Only one evasion attack family (case and punctuation stripping) was measured, and the defence is partial (keeping capitals still evades it).
+- There is no authentication, so rate limiting is per client address only, and a distributed attack from many IPs gets past it.
+- DoS measurements come from a single laptop, with large run-to-run variation.
+
+### Next steps
+- Retrain with more recent and more varied human writing (2026 data, informal and non-essay text) to bring down false positives.
+- Test more evasion attacks, such as paraphrasing, look-alike Unicode characters and inserted human-style sentences, and combine retraining with input normalisation.
+- Add a "before" switch for the upload checks so the unprotected behaviour can be measured the same way as the DoS defence.
+- Repeat the DoS measurements several times per configuration and report medians and ranges.
+- Verify model files with a SHA-256 hash at start-up before loading them (unsafe model loading).
+- Add security headers and run OWASP ZAP and `pip-audit` (misconfiguration and vulnerable dependencies).
+- If user accounts were added, keep a per-user history of checks with proper access control.
+
+---
+
+## Generative AI statement
+
+We used generative AI tools during this project as an aid, not as a replacement for our own work:
+
+- **Claude (Anthropic)** was used to review the finished application against the assignment specification and marking rubric, to identify gaps, and to help restructure and edit this README.
+- [Add any other tools your group used, e.g. ChatGPT or GitHub Copilot, and what each was used for.]
+
+All design decisions, model training, experiments and measurements were carried out by the group. Every piece of AI-suggested code or text was reviewed, tested against our own application and edited by a group member before it was included, and the group takes responsibility for all submitted work.
+
 ---
 
 ## References
+
+alitaqishah (2026) *AI vs Human Text Classification Dataset 2026* [dataset]. Kaggle. Available at: https://www.kaggle.com/datasets/alitaqishah/ai-vs-human-text-classification-dataset-2026 (Accessed: 8 November 2026).
+
+Anthropic (2026) *Claude* [large language model]. Available at: https://claude.ai (Accessed: 10 November 2026).
 
 Bostock, M., Ogievetsky, V. and Heer, J. (2011) 'D³: Data-driven documents', *IEEE Transactions on Visualization and Computer Graphics*, 17(12), pp. 2301–2309. doi:10.1109/TVCG.2011.185.
 
@@ -475,11 +568,11 @@ Ke, G., Meng, Q., Finley, T., Wang, T., Chen, W., Ma, W., Ye, Q. and Liu, T.-Y. 
 
 Kumarage, T., Garland, J., Bhattacharjee, A., Trapeznikov, K., Ruston, S. and Liu, H. (2023) 'Stylometric detection of AI-generated text in Twitter timelines', *arXiv preprint* arXiv:2303.03697. doi:10.48550/arXiv.2303.03697.
 
+OWASP Foundation (2021) *OWASP Top 10:2021*. Available at: https://owasp.org/Top10/ (Accessed: 10 November 2026).
+
 Pedregosa, F. et al. (2011) 'Scikit-learn: machine learning in Python', *Journal of Machine Learning Research*, 12, pp. 2825–2830.
 
 Ramírez, S. (2018) *FastAPI*. Available at: https://fastapi.tiangolo.com (Accessed: 8 November 2026).
-
-alitaqishah (2026) *AI vs Human Text Classification Dataset 2026* [dataset]. Kaggle. Available at: https://www.kaggle.com/datasets/alitaqishah/ai-vs-human-text-classification-dataset-2026 (Accessed: 8 November 2026).
 
 shanegerami (2024) *AI Vs Human Text* [dataset]. Kaggle. Available at: https://www.kaggle.com/datasets/shanegerami/ai-vs-human-text (Accessed: 8 November 2026).
 
