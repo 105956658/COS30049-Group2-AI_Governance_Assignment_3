@@ -534,9 +534,6 @@ python evasion_eval.py
 - Retrain with more recent and more varied human writing (2026 data, informal and non-essay text) to bring down false positives.
 - Test more evasion attacks, such as paraphrasing, look-alike Unicode characters and inserted human-style sentences, and combine retraining with input normalisation.
 - Add a "before" switch for the upload checks so the unprotected behaviour can be measured the same way as the DoS defence.
-- Repeat the DoS measurements several times per configuration and report medians and ranges.
-- Verify model files with a SHA-256 hash at start-up before loading them (unsafe model loading).
-- Add security headers and run OWASP ZAP and `pip-audit` (misconfiguration and vulnerable dependencies).
 - If user accounts were added, keep a per-user history of checks with proper access control.
 
 ---
@@ -545,8 +542,8 @@ python evasion_eval.py
 
 We used generative AI tools during this project as an aid, not as a replacement for our own work:
 
-- **Claude (Anthropic)** was used to review the finished application against the assignment specification and marking rubric, to identify gaps, and to help restructure and edit this README.
-- [Add any other tools your group used, e.g. ChatGPT or GitHub Copilot, and what each was used for.]
+- Claude was used to generate the demo flooding to check how effective DOS is on application.
+- Claude was also used for debugging while setting up the API, so that the back end’s request and response formats matched what the front end expects.
 
 All design decisions, model training, experiments and measurements were carried out by the group. Every piece of AI-suggested code or text was reviewed, tested against our own application and edited by a group member before it was included, and the group takes responsibility for all submitted work.
 
