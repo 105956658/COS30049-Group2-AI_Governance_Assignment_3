@@ -1,5 +1,6 @@
 # Raw datasets (too large for GitHub, download separately - see data/README.md)
 /data/
+model_training/data/
 
 # Python
 __pycache__/
